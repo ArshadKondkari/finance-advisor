@@ -3,7 +3,7 @@
 # IMPORTANT:
 # Saarthi is a React/TypeScript + Node.js project, not a Python project.
 # Do not install this file with "pip install -r requirements.txt".
-# The actual JavaScript install command is "pnpm install".
+# The actual JavaScript install command is "corepack pnpm install".
 #
 # Runtime requirements
 # --------------------
@@ -64,5 +64,6 @@
 # - Windows: double-click setup-windows.bat
 # - macOS/Linux: run ./setup-macos-linux.sh
 #
-# Those scripts run pnpm install, create the Drizzle tables, and start the
-# API and frontend. PostgreSQL must be installed and a database must exist.
+# Those scripts run pnpm install (through pnpm or Corepack), create the Drizzle
+# tables, and start the API and frontend. PostgreSQL must be installed and a
+# database must exist.
