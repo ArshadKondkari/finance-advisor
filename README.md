@@ -2,6 +2,83 @@
 
 Saarthi is a full-stack academic prototype that helps a user understand spending, budgets, savings goals, and unusual transactions. It is a budgeting and financial-habits decision-support tool. It does not provide investment advice, guaranteed returns, banking services, or bank-account synchronization.
 
+## Start here — easiest local setup
+
+This is a **Node.js/TypeScript project**, not a Python project.
+
+> Do **not** run `pip install -r requirements.txt`. Python packages are not used by this application. Use `pnpm install` instead.
+
+### Windows + VS Code
+
+1. Install **Node.js LTS** from <https://nodejs.org/>.
+2. Install **PostgreSQL** from <https://www.postgresql.org/download/>.
+3. Open PostgreSQL/pgAdmin and create a database named:
+
+   ```text
+   saarthi_finance
+   ```
+
+4. Open VS Code and open the folder where you want the project.
+5. Open **Terminal → New Terminal** and run these commands:
+
+   ```powershell
+   git clone https://github.com/ArshadKondkari/finance-advisor.git
+   cd finance-advisor
+   npm install --global pnpm
+   pnpm install
+   ```
+
+6. Set your PostgreSQL connection. Replace `YOUR_PASSWORD` with your PostgreSQL password:
+
+   ```powershell
+   $env:DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/saarthi_finance"
+   ```
+
+7. Create the application tables:
+
+   ```powershell
+   pnpm --filter @workspace/db run push
+   ```
+
+8. Start the backend in **Terminal 1**:
+
+   ```powershell
+   $env:PORT="5000"
+   pnpm --filter @workspace/api-server run dev
+   ```
+
+9. Open a second VS Code terminal and start the frontend:
+
+   ```powershell
+   $env:PORT="5173"
+   $env:BASE_PATH="/"
+   pnpm --filter @workspace/finance-advisor run dev
+   ```
+
+10. Open this address in your browser:
+
+    <http://localhost:5173>
+
+### One-click Windows setup
+
+After PostgreSQL is installed and the `saarthi_finance` database exists, you can double-click:
+
+```text
+setup-windows.bat
+```
+
+It installs the JavaScript libraries, creates the tables, starts the API and frontend, and opens the browser. It asks you for the `DATABASE_URL`.
+
+### If a command is not recognized
+
+If `pnpm` is not recognized, run:
+
+```powershell
+npm install --global pnpm
+```
+
+If `node` is not recognized, install Node.js LTS from <https://nodejs.org/> and restart VS Code.
+
 ## Quick start
 
 ### Prerequisites
