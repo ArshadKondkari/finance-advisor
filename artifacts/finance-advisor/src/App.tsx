@@ -1,10 +1,10 @@
-import { type ReactNode, type FormEvent, type InputHTMLAttributes, useState } from 'react';
+import { createContext, type ReactNode, type FormEvent, type InputHTMLAttributes, useContext, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { Link, Route, Switch, useLocation } from 'wouter';
 import {
   Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, Bot, Check, ChevronRight,
   CircleDollarSign, CreditCard, Database, Edit3, Flag, Gauge, LayoutDashboard, Lightbulb,
-  Menu, MessageCircle, Plus, RefreshCw, Search, Settings2, Sparkles, Target, Trash2, TrendingUp, X,
+  LogOut, Menu, MessageCircle, Plus, RefreshCw, Search, Settings2, Sparkles, Target, Trash2, TrendingUp, X,
 } from 'lucide-react';
 import {
   getGetDashboardQueryKey, getGetProfileQueryKey, getListAlertsQueryKey,
@@ -23,6 +23,35 @@ const queryClient = new QueryClient();
 const money = (value = 0) => `₹${Math.round(value).toLocaleString('en-IN')}`;
 const dateLabel = (date: string) => new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 const cx = (...values: Array<string | false | undefined>) => values.filter(Boolean).join(' ');
+type AuthUser = { id: number; name: string; email: string };
+type AuthState = { user: AuthUser | null; loading: boolean; setUser: (user: AuthUser) => void; logout: () => Promise<void> };
+const AuthContext = createContext<AuthState | null>(null);
+
+async function authRequest(path: string, body?: Record<string, string>) {
+  const response = await fetch(`/api/auth/${path}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'We could not complete that request.');
+  return payload as { user: AuthUser };
+}
+function useAuth() { const value = useContext(AuthContext); if (!value) throw new Error('Auth context is unavailable.'); return value; }
+
+function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null); const [loading, setLoading] = useState(true);
+  useEffect(() => { fetch('/api/auth/me', { credentials: 'include' }).then(async response => response.ok ? (await response.json()).user : null).catch(() => null).then(setUser).finally(() => setLoading(false)); }, []);
+  const logout = async () => { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); setUser(null); queryClient.clear(); };
+  return <AuthContext.Provider value={{ user, loading, setUser, logout }}>{children}</AuthContext.Provider>;
+}
+
+function AuthLayout({ children }: { children: ReactNode }) {
+  return <div className="app-noise flex min-h-[100dvh] items-center justify-center bg-[hsl(var(--background))] px-4 py-10 text-[hsl(var(--foreground))]"><div className="grid w-full max-w-5xl overflow-hidden rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl md:grid-cols-[.85fr_1.15fr]"><div className="hidden bg-[hsl(var(--sidebar))] p-10 text-[hsl(var(--sidebar-foreground))] md:flex md:flex-col md:justify-between"><div><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-[hsl(var(--sidebar-primary))] text-[hsl(var(--sidebar-primary-foreground))]"><CircleDollarSign size={24} /></div><span className="font-[var(--app-font-serif)] text-2xl font-bold">saarthi</span></div><div className="label mt-20 !text-[hsl(var(--sidebar-foreground)/.55)]">YOUR MONEY, WITH CONTEXT</div><h1 className="mt-3 max-w-sm font-[var(--app-font-serif)] text-4xl font-bold leading-tight">A calmer cockpit for everyday decisions.</h1><p className="mt-5 max-w-sm text-sm leading-relaxed text-[hsl(var(--sidebar-foreground)/.65)]">Track the details, understand the patterns, and make your next financial choice with more clarity.</p></div><div className="text-xs text-[hsl(var(--sidebar-foreground)/.5)]">Private by design · Built for your financial context</div></div><div className="p-6 sm:p-10">{children}</div></div></div>;
+}
+function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
+  const { user, setUser } = useAuth(); const [, navigate] = useLocation(); const signup = mode === 'signup';
+  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' }); const [error, setError] = useState(''); const [pending, setPending] = useState(false);
+  if (user) { navigate('/'); return null; }
+  const submit = async (event: FormEvent) => { event.preventDefault(); setError(''); if (!form.email || !form.password || (signup && !form.name)) return setError('Please complete all required fields.'); if (!/^\S+@\S+\.\S+$/.test(form.email)) return setError('Enter a valid email address.'); if (signup && form.password.length < 8) return setError('Password must be at least 8 characters.'); if (signup && form.password !== form.confirmPassword) return setError('Passwords do not match.'); setPending(true); try { const result = await authRequest(signup ? 'signup' : 'login', signup ? { name: form.name, email: form.email, password: form.password } : { email: form.email, password: form.password }); setUser(result.user); navigate('/'); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'We could not reach Saarthi. Try again.'); } finally { setPending(false); } };
+  return <AuthLayout><div className="mx-auto max-w-md"><div className="flex items-center gap-3 md:hidden"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]"><CircleDollarSign size={22} /></div><span className="font-[var(--app-font-serif)] text-xl font-bold">saarthi</span></div><div className="label mt-8 md:mt-0">{signup ? 'START YOUR SPACE' : 'WELCOME BACK'}</div><h1 className="mt-2 font-[var(--app-font-serif)] text-3xl font-bold tracking-tight">{signup ? 'Create your Saarthi account' : 'Sign in to your cockpit'}</h1><p className="mt-2 text-sm leading-relaxed text-[hsl(var(--muted-foreground))]">{signup ? 'Your financial context, organized around you.' : 'Pick up where your money story left off.'}</p><form onSubmit={submit} className="mt-8 space-y-4">{signup && <Field label="Name" autoComplete="name" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} required /> }<Field label="Email" type="email" autoComplete="email" value={form.email} onChange={event => setForm({ ...form, email: event.target.value })} required /><Field label="Password" type="password" autoComplete={signup ? 'new-password' : 'current-password'} value={form.password} onChange={event => setForm({ ...form, password: event.target.value })} required />{signup && <Field label="Confirm password" type="password" autoComplete="new-password" value={form.confirmPassword} onChange={event => setForm({ ...form, confirmPassword: event.target.value })} required />}{error && <div role="alert" className="rounded-xl border border-[hsl(var(--destructive)/.3)] bg-[hsl(var(--destructive)/.08)] px-3.5 py-3 text-sm text-[hsl(var(--destructive))]">{error}</div>}<Button type="submit" disabled={pending} className="w-full py-3">{pending ? 'Please wait...' : signup ? 'Create account' : 'Login'}</Button></form><p className="mt-6 text-center text-sm text-[hsl(var(--muted-foreground))]">{signup ? 'Already have an account?' : "Don't have an account?"}{' '}<Link href={signup ? '/login' : '/signup'} className="font-bold text-[hsl(var(--primary))]">{signup ? 'Login' : 'Sign Up'}</Link></p></div></AuthLayout>;
+}
 
 function Skeleton({ className = '' }: { className?: string }) {
   return <div className={cx('animate-pulse rounded-lg bg-[hsl(var(--muted))]', className)} />;
@@ -56,6 +85,7 @@ const nav = [
 ];
 function Shell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
+  const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const profile = useGetProfile();
   const health = useHealthCheck();
@@ -67,7 +97,7 @@ function Shell({ children }: { children: ReactNode }) {
       <div className="mt-10 flex-1"><div className="label mb-3 px-3 !text-[hsl(var(--sidebar-foreground)/.45)]">Navigate</div>{nav.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setMobileOpen(false)} data-testid={`link-${label.toLowerCase()}`} className={cx('mb-1 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition', location === href ? 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-foreground))]' : 'text-[hsl(var(--sidebar-foreground)/.64)] hover:bg-[hsl(var(--sidebar-accent)/.7)] hover:text-[hsl(var(--sidebar-foreground))]')}><Icon size={17} /><span>{label}</span>{location === href && <ChevronRight className="ml-auto" size={15} />}</Link>)}</div>
       <div className="rounded-2xl border border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-accent)/.55)] p-4"><div className="flex items-center gap-2"><span className={cx('agent-dot h-2 w-2 rounded-full', health.data?.status === 'ok' ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--primary))]')} /><span className="label !text-[hsl(var(--sidebar-foreground)/.6)]">advisor online</span></div><p className="mt-2 text-xs leading-relaxed text-[hsl(var(--sidebar-foreground)/.65)]">Your private financial context stays close to home.</p></div>
       <button data-testid="button-load-demo" onClick={() => demo.mutate(undefined, { onSuccess: () => queryClient.invalidateQueries() })} className="mt-3 flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-[hsl(var(--sidebar-foreground)/.55)] hover:bg-[hsl(var(--sidebar-accent))]"><Database size={14} /> {demo.isPending ? 'Loading sample...' : 'Load sample workspace'}</button>
-      <Link href="/profile" data-testid="link-profile" className="mt-4 flex items-center gap-3 border-t border-[hsl(var(--sidebar-border))] pt-4"><div className="grid h-9 w-9 place-items-center rounded-full bg-[hsl(var(--accent))] text-sm font-bold text-[hsl(var(--accent-foreground))]">{initials}</div><div className="min-w-0"><div className="truncate text-sm font-bold">{profile.data?.name || 'Your profile'}</div><div className="text-xs text-[hsl(var(--sidebar-foreground)/.55)]">Personal space</div></div><Settings2 size={16} className="ml-auto opacity-60" /></Link>
+      <div className="mt-4 border-t border-[hsl(var(--sidebar-border))] pt-4"><Link href="/profile" data-testid="link-profile" className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-full bg-[hsl(var(--accent))] text-sm font-bold text-[hsl(var(--accent-foreground))]">{initials}</div><div className="min-w-0"><div className="truncate text-sm font-bold">{user?.name || profile.data?.name || 'Your profile'}</div><div className="text-xs text-[hsl(var(--sidebar-foreground)/.55)]">Personal space</div></div><Settings2 size={16} className="ml-auto opacity-60" /></Link><button data-testid="button-logout" onClick={() => void logout()} className="mt-3 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-[hsl(var(--sidebar-foreground)/.55)] hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-foreground))]"><LogOut size={14} /> Log out</button></div>
     </aside>
     {mobileOpen && <button aria-label="close menu" onClick={() => setMobileOpen(false)} className="fixed inset-0 z-20 bg-[hsl(var(--foreground)/.25)] md:hidden" />}
     <main className="min-h-[100dvh] md:ml-64"><header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-[hsl(var(--border)/.7)] bg-[hsl(var(--background)/.86)] px-5 backdrop-blur-md md:px-8"><button data-testid="button-open-menu" onClick={() => setMobileOpen(true)} className="rounded-lg p-2 hover:bg-[hsl(var(--muted))] md:hidden"><Menu size={20} /></button><div className="hidden text-sm font-semibold text-[hsl(var(--muted-foreground))] md:block">{location === '/' ? 'A clearer view of your money' : nav.find(x => x.href === location)?.label || 'Settings'}</div><div className="ml-auto flex items-center gap-3"><div className="hidden items-center gap-2 rounded-full bg-[hsl(var(--muted))] px-3 py-1.5 text-xs font-medium text-[hsl(var(--muted-foreground))] sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--secondary))]" /> Data grounded</div><Link href="/profile" data-testid="link-header-profile" className="grid h-8 w-8 place-items-center rounded-full bg-[hsl(var(--primary))] text-xs font-bold text-[hsl(var(--primary-foreground))]">{initials}</Link></div></header><div className="mx-auto max-w-[1440px] p-5 md:p-8">{children}</div></main>
@@ -164,9 +194,12 @@ function ProfilePage() {
 
 function Router() {
   const [location] = useLocation();
+  const { user, loading } = useAuth();
+  if (loading) return <div className="grid min-h-[100dvh] place-items-center bg-[hsl(var(--background))] text-sm text-[hsl(var(--muted-foreground))]">Loading your Saarthi space...</div>;
+  if (!user) return <Switch><Route path="/signup"><AuthPage mode="signup" /></Route><Route path="*"><AuthPage mode="login" /></Route></Switch>;
   return <ErrorBoundary resetKey={location}><Shell><Switch><Route path="/" component={DashboardPage} /><Route path="/transactions" component={TransactionsPage} /><Route path="/budgets" component={BudgetsPage} /><Route path="/goals" component={GoalsPage} /><Route path="/advisor" component={AdvisorPage} /><Route path="/profile" component={ProfilePage} /><Route component={() => <EmptyState title="That page wandered off" message="The place you’re looking for doesn’t exist in this cockpit." action={<Link href="/" data-testid="link-back-home" className="inline-flex rounded-xl bg-[hsl(var(--primary))] px-4 py-2.5 text-sm font-semibold text-[hsl(var(--primary-foreground))]">Back to overview</Link>} />} /></Switch></Shell></ErrorBoundary>;
 }
 function App() {
-  return <QueryClientProvider client={queryClient}><TooltipProvider><Router /><Toaster /></TooltipProvider></QueryClientProvider>;
+  return <QueryClientProvider client={queryClient}><AuthProvider><TooltipProvider><Router /><Toaster /></TooltipProvider></AuthProvider></QueryClientProvider>;
 }
 export default App;

@@ -53,9 +53,9 @@ export const transactionsTable = pgTable("finance_transactions", {
 export const budgetsTable = pgTable("finance_budgets", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => usersTable.id, { onDelete: "cascade" }),
-  category: text("category").notNull().unique(),
+  category: text("category").notNull(),
   amount: real("amount").notNull(),
-});
+}, (table) => ({ userCategoryUnique: unique().on(table.userId, table.category) }));
 
 export const goalsTable = pgTable("finance_goals", {
   id: serial("id").primaryKey(),

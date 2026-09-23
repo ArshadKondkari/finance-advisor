@@ -23,8 +23,10 @@ import {
   UpdateTransactionParams,
   UpsertBudgetBody,
 } from "@workspace/api-zod";
+import { requireAuth } from "./auth";
 
 const router: IRouter = Router();
+router.use(requireAuth);
 const categories = ["Food", "Rent", "Transport", "Shopping", "Entertainment", "Bills", "Education", "Healthcare", "Other"];
 const trainingTerms: Record<string, string[]> = {
   Food: ["swiggy", "zomato", "restaurant", "cafe", "coffee", "lunch", "dinner", "grocery", "food", "blinkit"],
@@ -55,11 +57,12 @@ function classifyDescription(description: string) {
   return { category: best.score === 0 ? "Other" : best.category, confidence: round(confidence) };
 }
 
-async function ensureProfile() {
-  const [existing] = await db.select().from(profilesTable).limit(1);
+async function ensureProfile(userId: number) {
+  const [existing] = await db.select().from(profilesTable).where(eq(profilesTable.userId, userId)).limit(1);
   if (existing) return existing;
   const [created] = await db.insert(profilesTable).values({
     name: "Arshad",
+    userId,
     monthlyIncome: 50000,
     currentSavings: 40000,
     savingsTarget: 120000,
@@ -68,8 +71,8 @@ async function ensureProfile() {
   return created;
 }
 
-async function logAgent(stage: string, message: string) {
-  await db.insert(agentLogsTable).values({ stage, message });
+async function logAgent(userId: number, stage: string, message: string) {
+  await db.insert(agentLogsTable).values({ userId, stage, message });
 }
 
 function calculateAnomaly(amount: number, history: number[]) {
@@ -80,14 +83,14 @@ function calculateAnomaly(amount: number, history: number[]) {
   return amount > average + Math.max(deviation * 2, average * 0.8);
 }
 
-async function getCurrentTransactions() {
-  const all = await db.select().from(transactionsTable).orderBy(desc(transactionsTable.date), desc(transactionsTable.id));
+async function getCurrentTransactions(userId: number) {
+  const all = await db.select().from(transactionsTable).where(eq(transactionsTable.userId, userId)).orderBy(desc(transactionsTable.date), desc(transactionsTable.id));
   const month = all.length ? monthOf(all[0].date) : currentMonth();
   return { all, month, current: all.filter((item) => monthOf(item.date) === month) };
 }
 
-async function buildGoals(expectedMonthly: number) {
-  const goals = await db.select().from(goalsTable).orderBy(desc(goalsTable.id));
+async function buildGoals(userId: number, expectedMonthly: number) {
+  const goals = await db.select().from(goalsTable).where(eq(goalsTable.userId, userId)).orderBy(desc(goalsTable.id));
   return goals.map((goal) => {
     const remaining = Math.max(0, goal.targetAmount - goal.currentAmount);
     const requiredMonthly = round(remaining / Math.max(1, goal.deadlineMonths));
@@ -106,8 +109,8 @@ async function buildGoals(expectedMonthly: number) {
   });
 }
 
-async function buildBudgets(current: typeof transactionsTable.$inferSelect[]) {
-  const budgets = await db.select().from(budgetsTable).orderBy(budgetsTable.category);
+async function buildBudgets(userId: number, current: typeof transactionsTable.$inferSelect[]) {
+  const budgets = await db.select().from(budgetsTable).where(eq(budgetsTable.userId, userId)).orderBy(budgetsTable.category);
   return budgets.map((budget) => {
     const spent = round(current.filter((item) => item.category === budget.category).reduce((sum, item) => sum + item.amount, 0));
     const percentage = round(spent / Math.max(1, budget.amount) * 100);
@@ -122,9 +125,9 @@ async function buildBudgets(current: typeof transactionsTable.$inferSelect[]) {
   });
 }
 
-async function getDashboardData() {
-  const profile = await ensureProfile();
-  const { all, current } = await getCurrentTransactions();
+async function getDashboardData(userId: number) {
+  const profile = await ensureProfile(userId);
+  const { all, current } = await getCurrentTransactions(userId);
   const totalExpenses = round(current.reduce((sum, item) => sum + item.amount, 0));
   const remainingBalance = round(profile.monthlyIncome - totalExpenses);
   const months = [...new Set(all.map((item) => monthOf(item.date)))];
@@ -138,12 +141,12 @@ async function getDashboardData() {
   })).filter((item) => item.amount > 0).sort((a, b) => b.amount - a.amount);
   const historicalSavings = monthlyTrend.map((item) => profile.monthlyIncome - item.amount);
   const projectedSavings = historicalSavings.length ? round(historicalSavings.reduce((sum, value) => sum + value, 0) / historicalSavings.length) : remainingBalance;
-  const budgets = await buildBudgets(current);
-  const goals = await buildGoals(projectedSavings);
+  const budgets = await buildBudgets(userId, current);
+  const goals = await buildGoals(userId, projectedSavings);
   const [alerts, recommendations, activity] = await Promise.all([
-    db.select().from(alertsTable).orderBy(desc(alertsTable.createdAt), desc(alertsTable.id)).limit(6),
-    db.select().from(recommendationsTable).orderBy(desc(recommendationsTable.createdAt), desc(recommendationsTable.id)).limit(4),
-    db.select().from(agentLogsTable).orderBy(desc(agentLogsTable.createdAt), desc(agentLogsTable.id)).limit(8),
+    db.select().from(alertsTable).where(eq(alertsTable.userId, userId)).orderBy(desc(alertsTable.createdAt), desc(alertsTable.id)).limit(6),
+    db.select().from(recommendationsTable).where(eq(recommendationsTable.userId, userId)).orderBy(desc(recommendationsTable.createdAt), desc(recommendationsTable.id)).limit(4),
+    db.select().from(agentLogsTable).where(eq(agentLogsTable.userId, userId)).orderBy(desc(agentLogsTable.createdAt), desc(agentLogsTable.id)).limit(8),
   ]);
   return {
     profile,
@@ -168,8 +171,8 @@ async function getDashboardData() {
   };
 }
 
-async function createRecommendation() {
-  const dashboard = await getDashboardData();
+async function createRecommendation(userId: number) {
+  const dashboard = await getDashboardData(userId);
   const topBudget = dashboard.budgets.find((budget) => budget.status !== "Within budget");
   const goal = dashboard.goals[0];
   let title = "Keep the momentum";
@@ -187,38 +190,38 @@ async function createRecommendation() {
     action = "Increase monthly savings";
     utilityScore = 78;
   }
-  const [recommendation] = await db.insert(recommendationsTable).values({ title, message, action, utilityScore: round(utilityScore) }).returning();
+  const [recommendation] = await db.insert(recommendationsTable).values({ userId, title, message, action, utilityScore: round(utilityScore) }).returning();
   return recommendation;
 }
 
-async function runAgentLoop(context: string, transaction?: typeof transactionsTable.$inferSelect) {
-  await logAgent("SENSE", transaction ? `New transaction received: ${transaction.description}` : context);
-  await logAgent("PERCEIVE", "Transaction data processed and normalized.");
-  await logAgent("ANALYZE", "Category totals, trends, and budget variance recalculated.");
-  await logAgent("REASON", "Savings goal and anomaly signals evaluated against history.");
-  await logAgent("DECIDE", "Utility-ranked financial action selected from current conditions.");
-  await createRecommendation();
-  await logAgent("ACT", "Recommendation and alerts refreshed from the latest analysis.");
-  await logAgent("LEARN", "Historical pattern updated for the next decision.");
+async function runAgentLoop(userId: number, context: string, transaction?: typeof transactionsTable.$inferSelect) {
+  await logAgent(userId, "SENSE", transaction ? `New transaction received: ${transaction.description}` : context);
+  await logAgent(userId, "PERCEIVE", "Transaction data processed and normalized.");
+  await logAgent(userId, "ANALYZE", "Category totals, trends, and budget variance recalculated.");
+  await logAgent(userId, "REASON", "Savings goal and anomaly signals evaluated against history.");
+  await logAgent(userId, "DECIDE", "Utility-ranked financial action selected from current conditions.");
+  await createRecommendation(userId);
+  await logAgent(userId, "ACT", "Recommendation and alerts refreshed from the latest analysis.");
+  await logAgent(userId, "LEARN", "Historical pattern updated for the next decision.");
 }
 
-router.get("/profile", async (_req, res) => {
-  res.json(await ensureProfile());
+router.get("/profile", async (req, res) => {
+  res.json(await ensureProfile(req.userId!));
 });
 
 router.put("/profile", async (req, res) => {
   const parsed = UpdateProfileBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Please enter valid profile values." });
-  const profile = await ensureProfile();
+  const profile = await ensureProfile(req.userId!);
   const [updated] = await db.update(profilesTable).set(parsed.data).where(eq(profilesTable.id, profile.id)).returning();
-  await logAgent("LEARN", "Profile preferences updated for future decisions.");
+  await logAgent(req.userId!, "LEARN", "Profile preferences updated for future decisions.");
   return res.json(updated);
 });
 
 router.get("/transactions", async (req, res) => {
   const parsed = ListTransactionsQueryParams.safeParse(req.query);
   if (!parsed.success) return res.status(400).json({ error: "Invalid transaction filters." });
-  const filters = [];
+  const filters = [eq(transactionsTable.userId, req.userId!)];
   if (parsed.data.category) filters.push(eq(transactionsTable.category, parsed.data.category));
   if (parsed.data.search) filters.push(ilike(transactionsTable.description, `%${parsed.data.search}%`));
   const rows = await db.select().from(transactionsTable).where(filters.length ? and(...filters) : undefined).orderBy(desc(transactionsTable.date), desc(transactionsTable.id));
@@ -229,9 +232,10 @@ router.post("/transactions", async (req, res) => {
   const parsed = CreateTransactionBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Enter an amount, description, and date." });
   const classification = parsed.data.category ? { category: parsed.data.category, confidence: 1 } : classifyDescription(parsed.data.description);
-  const history = await db.select({ amount: transactionsTable.amount }).from(transactionsTable).where(eq(transactionsTable.category, classification.category));
+  const history = await db.select({ amount: transactionsTable.amount }).from(transactionsTable).where(and(eq(transactionsTable.userId, req.userId!), eq(transactionsTable.category, classification.category)));
   const isAnomaly = calculateAnomaly(parsed.data.amount, history.map((item) => item.amount));
   const [created] = await db.insert(transactionsTable).values({
+    userId: req.userId!,
     amount: parsed.data.amount,
     description: parsed.data.description,
     category: classification.category,
@@ -241,13 +245,13 @@ router.post("/transactions", async (req, res) => {
   }).returning();
   if (isAnomaly) {
     await db.insert(alertsTable).values({
-      type: "Unusual spending",
+      userId: req.userId!, type: "Unusual spending",
       severity: "warning",
       category: classification.category,
       message: `${classification.category} spending is significantly higher than your normal pattern.`,
     });
   }
-  await runAgentLoop("New transaction added.", created);
+  await runAgentLoop(req.userId!, "New transaction added.", created);
   return res.status(201).json(created);
 });
 
@@ -257,84 +261,84 @@ router.patch("/transactions/:id", async (req, res) => {
   if (!params.success || !parsed.success) return res.status(400).json({ error: "Invalid transaction." });
   const { category, ...transactionUpdates } = parsed.data;
   const updateData = category == null ? transactionUpdates : { ...transactionUpdates, category };
-  const [updated] = await db.update(transactionsTable).set(updateData).where(eq(transactionsTable.id, params.data.id)).returning();
+  const [updated] = await db.update(transactionsTable).set(updateData).where(and(eq(transactionsTable.id, params.data.id), eq(transactionsTable.userId, req.userId!))).returning();
   if (!updated) return res.status(404).json({ error: "Transaction not found." });
-  await runAgentLoop("Transaction updated.", updated);
+  await runAgentLoop(req.userId!, "Transaction updated.", updated);
   return res.json(updated);
 });
 
 router.delete("/transactions/:id", async (req, res) => {
   const params = UpdateTransactionParams.safeParse(req.params);
   if (!params.success) return res.status(400).json({ error: "Invalid transaction id." });
-  await db.delete(transactionsTable).where(eq(transactionsTable.id, params.data.id));
-  await runAgentLoop("Transaction removed and analysis refreshed.");
+  await db.delete(transactionsTable).where(and(eq(transactionsTable.id, params.data.id), eq(transactionsTable.userId, req.userId!)));
+  await runAgentLoop(req.userId!, "Transaction removed and analysis refreshed.");
   return res.status(204).send();
 });
 
-router.get("/budgets", async (_req, res) => {
-  const { current } = await getCurrentTransactions();
-  return res.json(await buildBudgets(current));
+router.get("/budgets", async (req, res) => {
+  const { current } = await getCurrentTransactions(req.userId!);
+  return res.json(await buildBudgets(req.userId!, current));
 });
 
 router.post("/budgets", async (req, res) => {
   const parsed = UpsertBudgetBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Enter a valid category budget." });
-  const existing = await db.select().from(budgetsTable).where(eq(budgetsTable.category, parsed.data.category));
+  const existing = await db.select().from(budgetsTable).where(and(eq(budgetsTable.userId, req.userId!), eq(budgetsTable.category, parsed.data.category)));
   const [budget] = existing.length
-    ? await db.update(budgetsTable).set({ amount: parsed.data.amount }).where(eq(budgetsTable.category, parsed.data.category)).returning()
-    : await db.insert(budgetsTable).values(parsed.data).returning();
-  await runAgentLoop("Budget updated.");
-  const { current } = await getCurrentTransactions();
-  const computed = (await buildBudgets(current)).find((item) => item.id === budget.id);
+    ? await db.update(budgetsTable).set({ amount: parsed.data.amount }).where(and(eq(budgetsTable.userId, req.userId!), eq(budgetsTable.category, parsed.data.category))).returning()
+    : await db.insert(budgetsTable).values({ ...parsed.data, userId: req.userId! }).returning();
+  await runAgentLoop(req.userId!, "Budget updated.");
+  const { current } = await getCurrentTransactions(req.userId!);
+  const computed = (await buildBudgets(req.userId!, current)).find((item) => item.id === budget.id);
   return res.json(computed ?? budget);
 });
 
-router.get("/goals", async (_req, res) => {
-  const dashboard = await getDashboardData();
+router.get("/goals", async (req, res) => {
+  const dashboard = await getDashboardData(req.userId!);
   return res.json(dashboard.goals);
 });
 
 router.post("/goals", async (req, res) => {
   const parsed = CreateGoalBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Enter a valid goal." });
-  const [goal] = await db.insert(goalsTable).values(parsed.data).returning();
-  await runAgentLoop("New savings goal created.");
-  const dashboard = await getDashboardData();
+  const [goal] = await db.insert(goalsTable).values({ ...parsed.data, userId: req.userId! }).returning();
+  await runAgentLoop(req.userId!, "New savings goal created.");
+  const dashboard = await getDashboardData(req.userId!);
   return res.status(201).json(dashboard.goals.find((item) => item.id === goal.id));
 });
 
-router.get("/dashboard", async (_req, res) => {
-  return res.json(await getDashboardData());
+router.get("/dashboard", async (req, res) => {
+  return res.json(await getDashboardData(req.userId!));
 });
 
-router.get("/alerts", async (_req, res) => {
-  const alerts = await db.select().from(alertsTable).orderBy(desc(alertsTable.createdAt), desc(alertsTable.id)).limit(30);
+router.get("/alerts", async (req, res) => {
+  const alerts = await db.select().from(alertsTable).where(eq(alertsTable.userId, req.userId!)).orderBy(desc(alertsTable.createdAt), desc(alertsTable.id)).limit(30);
   return res.json(alerts.map((alert) => ({ ...alert, createdAt: formatDate(alert.createdAt) })));
 });
 
 router.post("/alerts/:id/read", async (req, res) => {
   const parsed = MarkAlertReadParams.safeParse(req.params);
   if (!parsed.success) return res.status(400).json({ error: "Invalid alert id." });
-  const [alert] = await db.update(alertsTable).set({ isRead: true }).where(eq(alertsTable.id, parsed.data.id)).returning();
+  const [alert] = await db.update(alertsTable).set({ isRead: true }).where(and(eq(alertsTable.id, parsed.data.id), eq(alertsTable.userId, req.userId!))).returning();
   if (!alert) return res.status(404).json({ error: "Alert not found." });
   return res.json({ ...alert, createdAt: formatDate(alert.createdAt) });
 });
 
-router.get("/activity", async (_req, res) => {
-  const activity = await db.select().from(agentLogsTable).orderBy(desc(agentLogsTable.createdAt), desc(agentLogsTable.id)).limit(30);
+router.get("/activity", async (req, res) => {
+  const activity = await db.select().from(agentLogsTable).where(eq(agentLogsTable.userId, req.userId!)).orderBy(desc(agentLogsTable.createdAt), desc(agentLogsTable.id)).limit(30);
   return res.json(activity.map((item) => ({ ...item, createdAt: formatDate(item.createdAt) })));
 });
 
-router.post("/analyze", async (_req, res) => {
-  await runAgentLoop("Full analysis requested from the dashboard.");
-  return res.json(await getDashboardData());
+router.post("/analyze", async (req, res) => {
+  await runAgentLoop(req.userId!, "Full analysis requested from the dashboard.");
+  return res.json(await getDashboardData(req.userId!));
 });
 
 router.post("/chat", async (req, res) => {
   const parsed = AskAdvisorBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Ask a question about your finances." });
   const question = parsed.data.message.toLowerCase();
-  const dashboard = await getDashboardData();
+  const dashboard = await getDashboardData(req.userId!);
   if (question.includes("most") || question.includes("highest")) {
     return res.json({ answer: `Your highest spending category this period is ${dashboard.summary.highestCategory}, based on ₹${dashboard.categorySpending[0]?.amount.toLocaleString("en-IN") ?? "0"} in recorded expenses.`, source: "Stored transactions and dashboard analysis" });
   }
@@ -358,15 +362,15 @@ router.post("/chat", async (req, res) => {
 router.post("/feedback", async (req, res) => {
   const parsed = SubmitFeedbackBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid feedback." });
-  const [feedback] = await db.insert(feedbackTable).values(parsed.data).returning();
-  await db.update(recommendationsTable).set({ feedback: parsed.data.rating }).where(eq(recommendationsTable.id, parsed.data.recommendationId));
-  await logAgent("LEARN", `User marked a recommendation ${parsed.data.rating.replace("_", " ")}.`);
+  const [feedback] = await db.insert(feedbackTable).values({ ...parsed.data, userId: req.userId! }).returning();
+  await db.update(recommendationsTable).set({ feedback: parsed.data.rating }).where(and(eq(recommendationsTable.id, parsed.data.recommendationId), eq(recommendationsTable.userId, req.userId!)));
+  await logAgent(req.userId!, "LEARN", `User marked a recommendation ${parsed.data.rating.replace("_", " ")}.`);
   return res.status(201).json(feedback);
 });
 
-router.post("/demo/load", async (_req, res) => {
-  await ensureProfile();
-  const [existing] = await db.select({ id: transactionsTable.id }).from(transactionsTable).limit(1);
+router.post("/demo/load", async (req, res) => {
+  await ensureProfile(req.userId!);
+  const [existing] = await db.select({ id: transactionsTable.id }).from(transactionsTable).where(eq(transactionsTable.userId, req.userId!)).limit(1);
   if (!existing) {
     const demoTransactions = [
       ["2026-04-12", "Rent payment", "Rent", 15000],
@@ -390,21 +394,21 @@ router.post("/demo/load", async (_req, res) => {
       ["2026-09-10", "Amazon purchase", "Shopping", 2500],
       ["2026-09-13", "Concert tickets", "Entertainment", 8000],
     ] as const;
-    await db.insert(transactionsTable).values(demoTransactions.map(([date, description, category, amount]) => ({ date, description, category, amount, confidence: 0.94, isAnomaly: amount >= 7000 })));
+    await db.insert(transactionsTable).values(demoTransactions.map(([date, description, category, amount]) => ({ userId: req.userId!, date, description, category, amount, confidence: 0.94, isAnomaly: amount >= 7000 })));
     await db.insert(budgetsTable).values([
-      { category: "Food", amount: 6000 },
-      { category: "Transport", amount: 4000 },
-      { category: "Entertainment", amount: 3500 },
-      { category: "Shopping", amount: 4000 },
-      { category: "Bills", amount: 3000 },
+      { userId: req.userId!, category: "Food", amount: 6000 },
+      { userId: req.userId!, category: "Transport", amount: 4000 },
+      { userId: req.userId!, category: "Entertainment", amount: 3500 },
+      { userId: req.userId!, category: "Shopping", amount: 4000 },
+      { userId: req.userId!, category: "Bills", amount: 3000 },
     ]).onConflictDoNothing();
-    await db.insert(goalsTable).values({ title: "Build an emergency fund", targetAmount: 120000, currentAmount: 40000, deadlineMonths: 12 });
-    await db.insert(alertsTable).values({ type: "Unusual spending", severity: "warning", category: "Entertainment", message: "Entertainment spending is significantly higher than your normal pattern." });
-    await logAgent("SENSE", "Demo dataset loaded for the finance lab presentation.");
-    await logAgent("ANALYZE", "Six months of spending history is ready for trend analysis.");
+    await db.insert(goalsTable).values({ userId: req.userId!, title: "Build an emergency fund", targetAmount: 120000, currentAmount: 40000, deadlineMonths: 12 });
+    await db.insert(alertsTable).values({ userId: req.userId!, type: "Unusual spending", severity: "warning", category: "Entertainment", message: "Entertainment spending is significantly higher than your normal pattern." });
+    await logAgent(req.userId!, "SENSE", "Demo dataset loaded for the finance lab presentation.");
+    await logAgent(req.userId!, "ANALYZE", "Six months of spending history is ready for trend analysis.");
   }
-  await runAgentLoop("Demo data analysis refreshed.");
-  return res.json(await getDashboardData());
+  await runAgentLoop(req.userId!, "Demo data analysis refreshed.");
+  return res.json(await getDashboardData(req.userId!));
 });
 
 export default router;
