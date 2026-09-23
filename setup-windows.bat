@@ -29,13 +29,17 @@ if errorlevel 1 (
 
 where pnpm >nul 2>&1
 if errorlevel 1 (
-  echo pnpm was not found. Installing it with npm...
-  call npm install --global pnpm
+  where corepack >nul 2>&1
   if errorlevel 1 (
-    echo Could not install pnpm.
+    echo Neither pnpm nor Node.js Corepack was found.
+    echo Install or reinstall Node.js LTS from https://nodejs.org/
+    echo Then close and reopen this window.
     pause
     exit /b 1
   )
+  set "PNPM_CMD=corepack pnpm"
+) else (
+  set "PNPM_CMD=pnpm"
 )
 
 set /p DATABASE_URL=Enter your PostgreSQL DATABASE_URL: 
@@ -47,7 +51,7 @@ if "%DATABASE_URL%"=="" (
 
 echo.
 echo Installing project dependencies...
-call pnpm install
+call %PNPM_CMD% install
 if errorlevel 1 (
   echo Dependency installation failed.
   pause
@@ -57,7 +61,7 @@ if errorlevel 1 (
 echo.
 echo Creating or updating database tables...
 set "DATABASE_URL=%DATABASE_URL%"
-call pnpm --filter @workspace/db run push
+call %PNPM_CMD% --filter @workspace/db run push
 if errorlevel 1 (
   echo Database setup failed. Check PostgreSQL and DATABASE_URL.
   pause
@@ -66,8 +70,8 @@ if errorlevel 1 (
 
 echo.
 echo Starting the API and frontend in separate windows...
-start "Saarthi API" /D "%~dp0" cmd /k "set DATABASE_URL=%DATABASE_URL%&& set PORT=5000&& pnpm --filter @workspace/api-server run dev"
-start "Saarthi Web" /D "%~dp0" cmd /k "set PORT=5173&& set BASE_PATH=/&& pnpm --filter @workspace/finance-advisor run dev"
+start "Saarthi API" /D "%~dp0" cmd /k "set DATABASE_URL=%DATABASE_URL%&& set PORT=5000&& %PNPM_CMD% --filter @workspace/api-server run dev"
+start "Saarthi Web" /D "%~dp0" cmd /k "set PORT=5173&& set BASE_PATH=/&& %PNPM_CMD% --filter @workspace/finance-advisor run dev"
 
 timeout /t 4 /nobreak >nul
 start "" "http://localhost:5173"
