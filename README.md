@@ -6,7 +6,7 @@ Saarthi is a full-stack academic prototype that helps a user understand spending
 
 This is a **Node.js/TypeScript project**, not a Python project.
 
-> Do **not** run `pip install -r requirements.txt`. Python packages are not used by this application. Use `pnpm install` instead.
+> Do **not** run `pip install -r requirements.txt`. Python packages are not used by this application. Use `corepack pnpm install` instead.
 
 ### Windows + VS Code
 
@@ -24,9 +24,13 @@ This is a **Node.js/TypeScript project**, not a Python project.
    ```powershell
    git clone https://github.com/ArshadKondkari/finance-advisor.git
    cd finance-advisor
-   npm install --global pnpm
-   pnpm install
+   corepack pnpm --version
+   corepack pnpm install
    ```
+
+   This setup uses Node.js Corepack, so it does **not** require the `npm`
+   command. If `corepack` is also not recognized, install or reinstall the
+   official Node.js LTS package and restart VS Code.
 
 6. Set your PostgreSQL connection. Replace `YOUR_PASSWORD` with your PostgreSQL password:
 
@@ -37,14 +41,14 @@ This is a **Node.js/TypeScript project**, not a Python project.
 7. Create the application tables:
 
    ```powershell
-   pnpm --filter @workspace/db run push
+   corepack pnpm --filter @workspace/db run push
    ```
 
 8. Start the backend in **Terminal 1**:
 
    ```powershell
    $env:PORT="5000"
-   pnpm --filter @workspace/api-server run dev
+   corepack pnpm --filter @workspace/api-server run dev
    ```
 
 9. Open a second VS Code terminal and start the frontend:
@@ -52,7 +56,7 @@ This is a **Node.js/TypeScript project**, not a Python project.
    ```powershell
    $env:PORT="5173"
    $env:BASE_PATH="/"
-   pnpm --filter @workspace/finance-advisor run dev
+   corepack pnpm --filter @workspace/finance-advisor run dev
    ```
 
 10. Open this address in your browser:
@@ -71,13 +75,15 @@ It installs the JavaScript libraries, creates the tables, starts the API and fro
 
 ### If a command is not recognized
 
-If `pnpm` is not recognized, run:
+If `pnpm` is not recognized, use the Node.js-bundled Corepack command:
 
 ```powershell
-npm install --global pnpm
+corepack pnpm --version
 ```
 
-If `node` is not recognized, install Node.js LTS from <https://nodejs.org/> and restart VS Code.
+Then use `corepack pnpm` instead of `pnpm` for the commands below. If
+`corepack` is not recognized, install or reinstall Node.js LTS from
+<https://nodejs.org/> and restart VS Code.
 
 ## Quick start
 
@@ -128,14 +134,12 @@ Do not commit a real database password to GitHub.
 From the repository root:
 
 ```bash
-corepack enable
-pnpm install
+corepack pnpm install
 ```
 
-If `corepack` is unavailable, install pnpm with:
+If pnpm is already installed and available:
 
 ```bash
-npm install --global pnpm
 pnpm install
 ```
 
@@ -160,7 +164,7 @@ $env:DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/saarthi_fi
 Run this once after creating the database:
 
 ```bash
-pnpm --filter @workspace/db run push
+corepack pnpm --filter @workspace/db run push
 ```
 
 ### 6. Start the API
@@ -171,14 +175,14 @@ macOS/Linux:
 
 ```bash
 export PORT=5000
-pnpm --filter @workspace/api-server run dev
+corepack pnpm --filter @workspace/api-server run dev
 ```
 
 Windows PowerShell:
 
 ```powershell
 $env:PORT="5000"
-pnpm --filter @workspace/api-server run dev
+corepack pnpm --filter @workspace/api-server run dev
 ```
 
 Keep this terminal open. Test the API at <http://localhost:5000/api/healthz>.
@@ -192,7 +196,7 @@ macOS/Linux:
 ```bash
 export PORT=5173
 export BASE_PATH=/
-pnpm --filter @workspace/finance-advisor run dev
+corepack pnpm --filter @workspace/finance-advisor run dev
 ```
 
 Windows PowerShell:
@@ -200,7 +204,7 @@ Windows PowerShell:
 ```powershell
 $env:PORT="5173"
 $env:BASE_PATH="/"
-pnpm --filter @workspace/finance-advisor run dev
+corepack pnpm --filter @workspace/finance-advisor run dev
 ```
 
 Open <http://localhost:5173> in your browser.
@@ -214,7 +218,9 @@ After PostgreSQL is installed and the `saarthi_finance` database exists:
 - Windows: double-click `setup-windows.bat`
 - macOS/Linux: run `./setup-macos-linux.sh`
 
-The setup script installs dependencies, asks for your local `DATABASE_URL`, creates the tables, and starts both the API and frontend.
+The setup script installs dependencies, asks for your local `DATABASE_URL`, creates the tables, and starts both the API and frontend. It uses
+`corepack pnpm` when a standalone `pnpm` command is not available, so `npm`
+is not required.
 On Windows, it can offer to install Node.js LTS with `winget` if Node.js is missing. PostgreSQL must still be installed and configured separately.
 
 ## Demo flow
@@ -227,6 +233,122 @@ On Windows, it can offer to install Node.js LTS with `winget` if Node.js is miss
 6. Open Advisor and ask: `Which category am I spending the most on?`
 7. Run analysis and review the Agent Activity trail.
 8. Give feedback on a recommendation and show the Learn step.
+
+## Database table structure
+
+The application uses PostgreSQL with Drizzle ORM. You do **not** need to
+manually create each table: this command creates or updates them from the
+project schema:
+
+```bash
+corepack pnpm --filter @workspace/db run push
+```
+
+The database must already exist, for example `saarthi_finance`. The command
+creates these tables:
+
+### `finance_profiles`
+
+| Column | PostgreSQL type | Required | Default |
+| --- | --- | --- | --- |
+| `id` | `serial` | yes, primary key | auto-increment |
+| `name` | `text` | yes | — |
+| `monthly_income` | `real` | yes | `50000` |
+| `current_savings` | `real` | yes | `40000` |
+| `savings_target` | `real` | yes | `120000` |
+| `goal_duration_months` | `integer` | yes | `12` |
+
+### `finance_transactions`
+
+| Column | PostgreSQL type | Required | Default |
+| --- | --- | --- | --- |
+| `id` | `serial` | yes, primary key | auto-increment |
+| `amount` | `real` | yes | — |
+| `description` | `text` | yes | — |
+| `category` | `text` | yes | — |
+| `date` | `date` | yes | — |
+| `confidence` | `real` | yes | `1` |
+| `is_anomaly` | `boolean` | yes | `false` |
+| `created_at` | `timestamptz` | yes | current timestamp |
+
+### `finance_budgets`
+
+| Column | PostgreSQL type | Required | Default |
+| --- | --- | --- | --- |
+| `id` | `serial` | yes, primary key | auto-increment |
+| `category` | `text` | yes, unique | — |
+| `amount` | `real` | yes | — |
+
+### `finance_goals`
+
+| Column | PostgreSQL type | Required | Default |
+| --- | --- | --- | --- |
+| `id` | `serial` | yes, primary key | auto-increment |
+| `title` | `text` | yes | — |
+| `target_amount` | `real` | yes | — |
+| `current_amount` | `real` | yes | `0` |
+| `deadline_months` | `integer` | yes | — |
+| `created_at` | `timestamptz` | yes | current timestamp |
+
+### `finance_alerts`
+
+| Column | PostgreSQL type | Required | Default |
+| --- | --- | --- | --- |
+| `id` | `serial` | yes, primary key | auto-increment |
+| `type` | `text` | yes | — |
+| `severity` | `text` | yes | — |
+| `message` | `text` | yes | — |
+| `category` | `text` | yes | `General` |
+| `is_read` | `boolean` | yes | `false` |
+| `created_at` | `timestamptz` | yes | current timestamp |
+
+### `finance_recommendations`
+
+| Column | PostgreSQL type | Required | Default |
+| --- | --- | --- | --- |
+| `id` | `serial` | yes, primary key | auto-increment |
+| `title` | `text` | yes | — |
+| `message` | `text` | yes | — |
+| `action` | `text` | yes | — |
+| `utility_score` | `real` | yes | — |
+| `feedback` | `text` | no | `NULL` |
+| `created_at` | `timestamptz` | yes | current timestamp |
+
+### `finance_feedback`
+
+| Column | PostgreSQL type | Required | Default |
+| --- | --- | --- | --- |
+| `id` | `serial` | yes, primary key | auto-increment |
+| `recommendation_id` | `integer` | yes | — |
+| `rating` | `text` | yes | — |
+| `created_at` | `timestamptz` | yes | current timestamp |
+
+`recommendation_id` identifies the recommendation being rated. The current
+schema keeps this relationship at the application level rather than declaring
+a PostgreSQL foreign-key constraint.
+
+### `finance_agent_logs`
+
+| Column | PostgreSQL type | Required | Default |
+| --- | --- | --- | --- |
+| `id` | `serial` | yes, primary key | auto-increment |
+| `stage` | `text` | yes | — |
+| `message` | `text` | yes | — |
+| `created_at` | `timestamptz` | yes | current timestamp |
+
+To inspect the structure after setup, open `psql` and run:
+
+```sql
+\dt finance_*
+\d finance_profiles
+\d finance_transactions
+\d finance_budgets
+\d finance_goals
+\d finance_alerts
+\d finance_recommendations
+\d finance_feedback
+\d finance_agent_logs
+```
 
 ## What makes it an intelligent agent?
 
