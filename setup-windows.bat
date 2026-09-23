@@ -1,0 +1,64 @@
+@echo off
+setlocal EnableExtensions
+
+cd /d "%~dp0"
+
+echo Saarthi local setup
+echo ===================
+
+where node >nul 2>&1
+if errorlevel 1 (
+  echo Node.js was not found. Install Node.js 20.19+ from https://nodejs.org/
+  pause
+  exit /b 1
+)
+
+where pnpm >nul 2>&1
+if errorlevel 1 (
+  echo pnpm was not found. Installing it with npm...
+  call npm install --global pnpm
+  if errorlevel 1 (
+    echo Could not install pnpm.
+    pause
+    exit /b 1
+  )
+)
+
+set /p DATABASE_URL=Enter your PostgreSQL DATABASE_URL: 
+if "%DATABASE_URL%"=="" (
+  echo DATABASE_URL is required.
+  pause
+  exit /b 1
+)
+
+echo.
+echo Installing project dependencies...
+call pnpm install
+if errorlevel 1 (
+  echo Dependency installation failed.
+  pause
+  exit /b 1
+)
+
+echo.
+echo Creating or updating database tables...
+set "DATABASE_URL=%DATABASE_URL%"
+call pnpm --filter @workspace/db run push
+if errorlevel 1 (
+  echo Database setup failed. Check PostgreSQL and DATABASE_URL.
+  pause
+  exit /b 1
+)
+
+echo.
+echo Starting the API and frontend in separate windows...
+start "Saarthi API" /D "%~dp0" cmd /k "set DATABASE_URL=%DATABASE_URL%&& set PORT=5000&& pnpm --filter @workspace/api-server run dev"
+start "Saarthi Web" /D "%~dp0" cmd /k "set PORT=5173&& set BASE_PATH=/&& pnpm --filter @workspace/finance-advisor run dev"
+
+timeout /t 4 /nobreak >nul
+start "" "http://localhost:5173"
+
+echo.
+echo Saarthi is starting at http://localhost:5173
+echo Keep both terminal windows open while using the app.
+pause

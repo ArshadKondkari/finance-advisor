@@ -1,0 +1,18 @@
+# Saarthi is a JavaScript/TypeScript application, not a Python application.
+#
+# Do not run:
+#   pip install -r requirements.txt
+#
+# The complete JavaScript dependency list is stored in package.json files and
+# pinned by pnpm-lock.yaml. Install it with:
+#   corepack enable
+#   pnpm install
+#
+# Required local software:
+# - Node.js 20.19+ or Node.js 22+
+# - pnpm 9+
+# - PostgreSQL 14+
+#
+# One-click setup:
+# - Windows: setup-windows.bat
+# - macOS/Linux: ./setup-macos-linux.sh

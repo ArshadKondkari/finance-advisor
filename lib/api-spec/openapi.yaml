@@ -1,0 +1,501 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: finance
+    description: Personal finance advisor operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /profile:
+    get:
+      operationId: getProfile
+      tags: [finance]
+      summary: Get the financial profile
+      responses:
+        "200":
+          description: Financial profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+    put:
+      operationId: updateProfile
+      tags: [finance]
+      summary: Update the financial profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileInput"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+  /transactions:
+    get:
+      operationId: listTransactions
+      tags: [finance]
+      summary: List recent transactions
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+    post:
+      operationId: createTransaction
+      tags: [finance]
+      summary: Add a transaction and run the agent loop
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransactionInput"
+      responses:
+        "201":
+          description: Created transaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+  /transactions/{id}:
+    patch:
+      operationId: updateTransaction
+      tags: [finance]
+      summary: Update a transaction
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransactionInput"
+      responses:
+        "200":
+          description: Updated transaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+    delete:
+      operationId: deleteTransaction
+      tags: [finance]
+      summary: Delete a transaction
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+  /budgets:
+    get:
+      operationId: listBudgets
+      tags: [finance]
+      summary: List category budgets
+      responses:
+        "200":
+          description: Budgets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Budget"
+    post:
+      operationId: upsertBudget
+      tags: [finance]
+      summary: Create or update a category budget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BudgetInput"
+      responses:
+        "200":
+          description: Saved budget
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Budget"
+  /goals:
+    get:
+      operationId: listGoals
+      tags: [finance]
+      summary: List savings goals
+      responses:
+        "200":
+          description: Goals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Goal"
+    post:
+      operationId: createGoal
+      tags: [finance]
+      summary: Create a savings goal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoalInput"
+      responses:
+        "201":
+          description: Created goal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Goal"
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [finance]
+      summary: Get the computed dashboard and agent decision
+      responses:
+        "200":
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+  /alerts:
+    get:
+      operationId: listAlerts
+      tags: [finance]
+      summary: List generated alerts
+      responses:
+        "200":
+          description: Alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Alert"
+  /alerts/{id}/read:
+    post:
+      operationId: markAlertRead
+      tags: [finance]
+      summary: Mark an alert as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+  /activity:
+    get:
+      operationId: listActivity
+      tags: [finance]
+      summary: List recent agent activity
+      responses:
+        "200":
+          description: Agent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentLog"
+  /analyze:
+    post:
+      operationId: analyzeFinances
+      tags: [finance]
+      summary: Re-run the full agent analysis
+      responses:
+        "200":
+          description: Fresh dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+  /chat:
+    post:
+      operationId: askAdvisor
+      tags: [finance]
+      summary: Ask the local data-grounded advisor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatInput"
+      responses:
+        "200":
+          description: Advisor response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+  /feedback:
+    post:
+      operationId: submitFeedback
+      tags: [finance]
+      summary: Record feedback on an agent recommendation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedbackInput"
+      responses:
+        "201":
+          description: Saved feedback
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feedback"
+  /demo/load:
+    post:
+      operationId: loadDemoData
+      tags: [finance]
+      summary: Load safe sample data for a classroom demonstration
+      responses:
+        "200":
+          description: Seeded dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    Profile:
+      type: object
+      required: [id, name, monthlyIncome, currentSavings, savingsTarget, goalDurationMonths]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        monthlyIncome: { type: number }
+        currentSavings: { type: number }
+        savingsTarget: { type: number }
+        goalDurationMonths: { type: integer }
+    ProfileInput:
+      type: object
+      required: [name, monthlyIncome, currentSavings, savingsTarget, goalDurationMonths]
+      properties:
+        name: { type: string, minLength: 1 }
+        monthlyIncome: { type: number, minimum: 0 }
+        currentSavings: { type: number, minimum: 0 }
+        savingsTarget: { type: number, minimum: 0 }
+        goalDurationMonths: { type: integer, minimum: 1 }
+    Transaction:
+      type: object
+      required: [id, amount, description, category, date, confidence, isAnomaly]
+      properties:
+        id: { type: integer }
+        amount: { type: number }
+        description: { type: string }
+        category: { type: string }
+        date: { type: string }
+        confidence: { type: number }
+        isAnomaly: { type: boolean }
+    TransactionInput:
+      type: object
+      required: [amount, description, date]
+      properties:
+        amount: { type: number, minimum: 0.01 }
+        description: { type: string, minLength: 1 }
+        category: { type: ["string", "null"] }
+        date: { type: string }
+    Budget:
+      type: object
+      required: [id, category, amount, spent, status, percentage]
+      properties:
+        id: { type: integer }
+        category: { type: string }
+        amount: { type: number }
+        spent: { type: number }
+        status: { type: string }
+        percentage: { type: number }
+    BudgetInput:
+      type: object
+      required: [category, amount]
+      properties:
+        category: { type: string, minLength: 1 }
+        amount: { type: number, minimum: 0 }
+    Goal:
+      type: object
+      required: [id, title, targetAmount, currentAmount, deadlineMonths, progress, requiredMonthly, expectedMonthly, status]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        targetAmount: { type: number }
+        currentAmount: { type: number }
+        deadlineMonths: { type: integer }
+        progress: { type: number }
+        requiredMonthly: { type: number }
+        expectedMonthly: { type: number }
+        status: { type: string }
+    GoalInput:
+      type: object
+      required: [title, targetAmount, deadlineMonths]
+      properties:
+        title: { type: string, minLength: 1 }
+        targetAmount: { type: number, minimum: 0 }
+        deadlineMonths: { type: integer, minimum: 1 }
+    Alert:
+      type: object
+      required: [id, type, severity, message, category, createdAt, isRead]
+      properties:
+        id: { type: integer }
+        type: { type: string }
+        severity: { type: string }
+        message: { type: string }
+        category: { type: string }
+        createdAt: { type: string }
+        isRead: { type: boolean }
+    AgentLog:
+      type: object
+      required: [id, stage, message, createdAt]
+      properties:
+        id: { type: integer }
+        stage: { type: string }
+        message: { type: string }
+        createdAt: { type: string }
+    Recommendation:
+      type: object
+      required: [id, title, message, action, utilityScore, createdAt, feedback]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        message: { type: string }
+        action: { type: string }
+        utilityScore: { type: number }
+        createdAt: { type: string }
+        feedback: { type: ["string", "null"] }
+    Dashboard:
+      type: object
+      required: [profile, summary, categorySpending, monthlyTrend, budgets, goals, alerts, recommendations, activity, agentStatus]
+      properties:
+        profile: { $ref: "#/components/schemas/Profile" }
+        summary:
+          type: object
+          required: [income, totalExpenses, remainingBalance, currentSavings, projectedSavings, savingsProgress, highestCategory, averageDaily]
+          properties:
+            income: { type: number }
+            totalExpenses: { type: number }
+            remainingBalance: { type: number }
+            currentSavings: { type: number }
+            projectedSavings: { type: number }
+            savingsProgress: { type: number }
+            highestCategory: { type: string }
+            averageDaily: { type: number }
+        categorySpending:
+          type: array
+          items:
+            type: object
+            required: [category, amount]
+            properties:
+              category: { type: string }
+              amount: { type: number }
+        monthlyTrend:
+          type: array
+          items:
+            type: object
+            required: [month, amount]
+            properties:
+              month: { type: string }
+              amount: { type: number }
+        budgets:
+          type: array
+          items: { $ref: "#/components/schemas/Budget" }
+        goals:
+          type: array
+          items: { $ref: "#/components/schemas/Goal" }
+        alerts:
+          type: array
+          items: { $ref: "#/components/schemas/Alert" }
+        recommendations:
+          type: array
+          items: { $ref: "#/components/schemas/Recommendation" }
+        activity:
+          type: array
+          items: { $ref: "#/components/schemas/AgentLog" }
+        agentStatus: { type: string }
+    ChatInput:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string, minLength: 1 }
+    ChatResponse:
+      type: object
+      required: [answer, source]
+      properties:
+        answer: { type: string }
+        source: { type: string }
+    FeedbackInput:
+      type: object
+      required: [recommendationId, rating]
+      properties:
+        recommendationId: { type: integer }
+        rating: { type: string, enum: [helpful, not_helpful] }
+    Feedback:
+      type: object
+      required: [id, recommendationId, rating]
+      properties:
+        id: { type: integer }
+        recommendationId: { type: integer }
+        rating: { type: string }
+
