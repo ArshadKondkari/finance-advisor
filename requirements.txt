@@ -1,18 +1,68 @@
-# Saarthi is a JavaScript/TypeScript application, not a Python application.
+# Saarthi requirements manifest
 #
-# Do not run:
-#   pip install -r requirements.txt
+# IMPORTANT:
+# Saarthi is a React/TypeScript + Node.js project, not a Python project.
+# Do not install this file with "pip install -r requirements.txt".
+# The actual JavaScript install command is "pnpm install".
 #
-# The complete JavaScript dependency list is stored in package.json files and
-# pinned by pnpm-lock.yaml. Install it with:
-#   corepack enable
-#   pnpm install
+# Runtime requirements
+# --------------------
+# Node.js 20.19+ or Node.js 22+
+# pnpm 9+
+# PostgreSQL 14+
 #
-# Required local software:
-# - Node.js 20.19+ or Node.js 22+
-# - pnpm 9+
-# - PostgreSQL 14+
+# The exact transitive versions are pinned in pnpm-lock.yaml.
+# Direct package dependencies are declared in these package manifests:
+# - package.json
+# - artifacts/api-server/package.json
+# - artifacts/finance-advisor/package.json
+# - lib/db/package.json
+# - lib/api-spec/package.json
+# - lib/api-zod/package.json
+# - lib/api-client-react/package.json
+#
+# Direct workspace libraries
+# -------------------------
+# Root:
+# @replit/connectors-sdk, prettier, typescript
+#
+# API server:
+# @workspace/api-zod, @workspace/db, cookie-parser, cors, drizzle-orm,
+# express, pino, pino-http, @types/cookie-parser, @types/cors,
+# @types/express, @types/node, esbuild, esbuild-plugin-pino,
+# pino-pretty, thread-stream
+#
+# Frontend:
+# @hookform/resolvers, @radix-ui/react-accordion,
+# @radix-ui/react-alert-dialog, @radix-ui/react-aspect-ratio,
+# @radix-ui/react-avatar, @radix-ui/react-checkbox,
+# @radix-ui/react-collapsible, @radix-ui/react-context-menu,
+# @radix-ui/react-dialog, @radix-ui/react-dropdown-menu,
+# @radix-ui/react-hover-card, @radix-ui/react-label,
+# @radix-ui/react-menubar, @radix-ui/react-navigation-menu,
+# @radix-ui/react-popover, @radix-ui/react-progress,
+# @radix-ui/react-radio-group, @radix-ui/react-scroll-area,
+# @radix-ui/react-select, @radix-ui/react-separator,
+# @radix-ui/react-slider, @radix-ui/react-slot, @radix-ui/react-switch,
+# @radix-ui/react-tabs, @radix-ui/react-toast, @radix-ui/react-toggle,
+# @radix-ui/react-toggle-group, @radix-ui/react-tooltip,
+# @replit/vite-plugin-cartographer, @replit/vite-plugin-dev-banner,
+# @replit/vite-plugin-runtime-error-modal, @tailwindcss/typography,
+# @tailwindcss/vite, @tanstack/react-query, @types/node, @types/react,
+# @types/react-dom, @vitejs/plugin-react, @workspace/api-client-react,
+# class-variance-authority, clsx, cmdk, date-fns, embla-carousel-react,
+# framer-motion, input-otp, lucide-react, next-themes, react,
+# react-day-picker, react-dom, react-hook-form, react-icons,
+# react-resizable-panels, recharts, sonner, tailwind-merge, tailwindcss,
+# tw-animate-css, vaul, vite, wouter, zod
+#
+# Database and API tooling:
+# drizzle-orm, drizzle-zod, pg, zod, @types/node, @types/pg,
+# drizzle-kit, orval, @tanstack/react-query
 #
 # One-click setup:
-# - Windows: setup-windows.bat
-# - macOS/Linux: ./setup-macos-linux.sh
+# - Windows: double-click setup-windows.bat
+# - macOS/Linux: run ./setup-macos-linux.sh
+#
+# Those scripts run pnpm install, create the Drizzle tables, and start the
+# API and frontend. PostgreSQL must be installed and a database must exist.

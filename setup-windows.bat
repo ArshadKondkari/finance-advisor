@@ -8,9 +8,23 @@ echo ===================
 
 where node >nul 2>&1
 if errorlevel 1 (
-  echo Node.js was not found. Install Node.js 20.19+ from https://nodejs.org/
+  echo Node.js was not found.
+  where winget >nul 2>&1
+  if errorlevel 1 (
+    echo Install Node.js 20.19+ from https://nodejs.org/ and run this file again.
+    pause
+    exit /b 1
+  )
+  echo Installing Node.js LTS with winget...
+  winget install --id OpenJS.NodeJS.LTS --exact --source winget --accept-source-agreements --accept-package-agreements
+  if errorlevel 1 (
+    echo Node.js installation failed. Install it from https://nodejs.org/
+    pause
+    exit /b 1
+  )
+  echo Node.js was installed. Close this window, open a new terminal, and run setup-windows.bat again.
   pause
-  exit /b 1
+  exit /b 0
 )
 
 where pnpm >nul 2>&1

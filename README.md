@@ -138,6 +138,7 @@ After PostgreSQL is installed and the `saarthi_finance` database exists:
 - macOS/Linux: run `./setup-macos-linux.sh`
 
 The setup script installs dependencies, asks for your local `DATABASE_URL`, creates the tables, and starts both the API and frontend.
+On Windows, it can offer to install Node.js LTS with `winget` if Node.js is missing. PostgreSQL must still be installed and configured separately.
 
 ## Demo flow
 
