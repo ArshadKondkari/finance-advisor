@@ -7,12 +7,30 @@ import {
   serial,
   text,
   timestamp,
+  unique,
   pgTable,
 } from "drizzle-orm/pg-core";
 import { z } from "zod/v4";
 
+export const usersTable = pgTable("auth_users", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const sessionsTable = pgTable("auth_sessions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const profilesTable = pgTable("finance_profiles", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   monthlyIncome: real("monthly_income").notNull().default(50000),
   currentSavings: real("current_savings").notNull().default(40000),
@@ -22,6 +40,7 @@ export const profilesTable = pgTable("finance_profiles", {
 
 export const transactionsTable = pgTable("finance_transactions", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: "cascade" }),
   amount: real("amount").notNull(),
   description: text("description").notNull(),
   category: text("category").notNull(),
@@ -33,12 +52,14 @@ export const transactionsTable = pgTable("finance_transactions", {
 
 export const budgetsTable = pgTable("finance_budgets", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: "cascade" }),
   category: text("category").notNull().unique(),
   amount: real("amount").notNull(),
 });
 
 export const goalsTable = pgTable("finance_goals", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   targetAmount: real("target_amount").notNull(),
   currentAmount: real("current_amount").notNull().default(0),
@@ -48,6 +69,7 @@ export const goalsTable = pgTable("finance_goals", {
 
 export const alertsTable = pgTable("finance_alerts", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: "cascade" }),
   type: text("type").notNull(),
   severity: text("severity").notNull(),
   message: text("message").notNull(),
@@ -58,6 +80,7 @@ export const alertsTable = pgTable("finance_alerts", {
 
 export const recommendationsTable = pgTable("finance_recommendations", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   message: text("message").notNull(),
   action: text("action").notNull(),
@@ -68,6 +91,7 @@ export const recommendationsTable = pgTable("finance_recommendations", {
 
 export const feedbackTable = pgTable("finance_feedback", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: "cascade" }),
   recommendationId: integer("recommendation_id").notNull(),
   rating: text("rating").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -75,6 +99,7 @@ export const feedbackTable = pgTable("finance_feedback", {
 
 export const agentLogsTable = pgTable("finance_agent_logs", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: "cascade" }),
   stage: text("stage").notNull(),
   message: text("message").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

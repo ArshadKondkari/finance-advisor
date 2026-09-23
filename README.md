@@ -1,5 +1,5 @@
-# Saarthi — AI Personal Finance Advisor
-
+[
+    "=-\;lu]87ncs
 Saarthi is a full-stack academic prototype that helps a user understand spending, budgets, savings goals, and unusual transactions. It is a budgeting and financial-habits decision-support tool. It does not provide investment advice, guaranteed returns, banking services, or bank-account synchronization.
 
 ## Start here — easiest local setup
