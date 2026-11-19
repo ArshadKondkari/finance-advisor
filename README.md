@@ -1,10 +1,54 @@
-[ "=-;lu]87ncs Saarthi is a full-stack academic prototype that helps a user understand spending, budgets, savings goals, and unusual transactions. It is a budgeting and financial-habits decision-support tool. It does not provide investment advice, guaranteed returns, banking services, or bank-account synchronization.
+# Saarthi
+
+Saarthi is a full-stack academic prototype that helps a user understand spending, budgets, savings goals, and unusual transactions. It is a budgeting and financial-habits decision-support tool. It does not provide investment advice, guaranteed returns, banking services, or bank-account synchronization.
 
 ## Start here — easiest local setup
 
 This is a **Node.js/TypeScript project**, not a Python project.
 
 > Do **not** run `pip install -r requirements.txt`. Python packages are not used by this application. Use `corepack pnpm install` instead.
+
+## How to run the project
+
+Run this once from the project root:
+
+```powershell
+corepack pnpm install
+```
+
+### Backend: Terminal 1
+
+Set the required environment variables in PowerShell:
+
+```powershell
+$env:DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/saarthi_finance"
+$env:PORT="5000"
+$env:OPENROUTER_API_KEY="YOUR_OPENROUTER_API_KEY"
+$env:OPENROUTER_MODEL="openai/gpt-4o-mini"
+```
+
+Create or update the database tables, then start the backend:
+
+```powershell
+corepack pnpm --filter @workspace/db run push
+corepack pnpm --filter @workspace/api-server run dev
+```
+
+Keep this terminal open. The API runs at <http://localhost:5000>.
+
+`OPENROUTER_API_KEY` is optional for starting the application. If it is not set,
+AI-generated Advisor answers fall back to local recommendations. Never commit
+the real API key or database password to the repository.
+
+### Frontend: Terminal 2
+
+```powershell
+$env:PORT="5173"
+$env:BASE_PATH="/"
+corepack pnpm --filter @workspace/finance-advisor run dev
+```
+
+Open <http://localhost:5173>.
 
 ### Windows + VS Code
 
@@ -45,7 +89,10 @@ This is a **Node.js/TypeScript project**, not a Python project.
 8. Start the backend in **Terminal 1**:
 
    ```powershell
+   $env:DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/saarthi_finance"
    $env:PORT="5000"
+   $env:OPENROUTER_API_KEY="YOUR_OPENROUTER_API_KEY"
+   $env:OPENROUTER_MODEL="openai/gpt-4o-mini"
    corepack pnpm --filter @workspace/api-server run dev
    ```
 
@@ -173,6 +220,8 @@ macOS/Linux:
 
 ```bash
 export PORT=5000
+export OPENROUTER_API_KEY="YOUR_OPENROUTER_API_KEY"
+export OPENROUTER_MODEL="openai/gpt-4o-mini"
 corepack pnpm --filter @workspace/api-server run dev
 ```
 
@@ -180,6 +229,8 @@ Windows PowerShell:
 
 ```powershell
 $env:PORT="5000"
+$env:OPENROUTER_API_KEY="YOUR_OPENROUTER_API_KEY"
+$env:OPENROUTER_MODEL="openai/gpt-4o-mini"
 corepack pnpm --filter @workspace/api-server run dev
 ```
 
@@ -245,11 +296,34 @@ corepack pnpm --filter @workspace/db run push
 The database must already exist, for example `saarthi_finance`. The command
 creates these tables:
 
+### `auth_users`
+
+| Column | PostgreSQL type | Required | Default |
+| --- | --- | --- | --- |
+| `id` | `serial` | yes, primary key | auto-increment |
+| `name` | `text` | yes | — |
+| `email` | `text` | yes, unique | — |
+| `password_hash` | `text` | yes | — |
+| `created_at` | `timestamptz` | yes | current timestamp |
+
+### `auth_sessions`
+
+| Column | PostgreSQL type | Required | Default |
+| --- | --- | --- | --- |
+| `id` | `serial` | yes, primary key | auto-increment |
+| `user_id` | `integer` | yes | — |
+| `token_hash` | `text` | yes, unique | — |
+| `expires_at` | `timestamptz` | yes | — |
+| `created_at` | `timestamptz` | yes | current timestamp |
+
+`user_id` references `auth_users.id` and deletes the user's sessions when that user is deleted.
+
 ### `finance_profiles`
 
 | Column | PostgreSQL type | Required | Default |
 | --- | --- | --- | --- |
 | `id` | `serial` | yes, primary key | auto-increment |
+| `user_id` | `integer` | no | `NULL` |
 | `name` | `text` | yes | — |
 | `monthly_income` | `real` | yes | `50000` |
 | `current_savings` | `real` | yes | `40000` |
@@ -261,6 +335,7 @@ creates these tables:
 | Column | PostgreSQL type | Required | Default |
 | --- | --- | --- | --- |
 | `id` | `serial` | yes, primary key | auto-increment |
+| `user_id` | `integer` | no | `NULL` |
 | `amount` | `real` | yes | — |
 | `description` | `text` | yes | — |
 | `category` | `text` | yes | — |
@@ -274,7 +349,8 @@ creates these tables:
 | Column | PostgreSQL type | Required | Default |
 | --- | --- | --- | --- |
 | `id` | `serial` | yes, primary key | auto-increment |
-| `category` | `text` | yes, unique | — |
+| `user_id` | `integer` | no | `NULL` |
+| `category` | `text` | yes | — |
 | `amount` | `real` | yes | — |
 
 ### `finance_goals`
@@ -282,6 +358,7 @@ creates these tables:
 | Column | PostgreSQL type | Required | Default |
 | --- | --- | --- | --- |
 | `id` | `serial` | yes, primary key | auto-increment |
+| `user_id` | `integer` | no | `NULL` |
 | `title` | `text` | yes | — |
 | `target_amount` | `real` | yes | — |
 | `current_amount` | `real` | yes | `0` |
@@ -293,6 +370,7 @@ creates these tables:
 | Column | PostgreSQL type | Required | Default |
 | --- | --- | --- | --- |
 | `id` | `serial` | yes, primary key | auto-increment |
+| `user_id` | `integer` | no | `NULL` |
 | `type` | `text` | yes | — |
 | `severity` | `text` | yes | — |
 | `message` | `text` | yes | — |
@@ -305,6 +383,7 @@ creates these tables:
 | Column | PostgreSQL type | Required | Default |
 | --- | --- | --- | --- |
 | `id` | `serial` | yes, primary key | auto-increment |
+| `user_id` | `integer` | no | `NULL` |
 | `title` | `text` | yes | — |
 | `message` | `text` | yes | — |
 | `action` | `text` | yes | — |
@@ -317,6 +396,7 @@ creates these tables:
 | Column | PostgreSQL type | Required | Default |
 | --- | --- | --- | --- |
 | `id` | `serial` | yes, primary key | auto-increment |
+| `user_id` | `integer` | no | `NULL` |
 | `recommendation_id` | `integer` | yes | — |
 | `rating` | `text` | yes | — |
 | `created_at` | `timestamptz` | yes | current timestamp |
@@ -330,6 +410,7 @@ a PostgreSQL foreign-key constraint.
 | Column | PostgreSQL type | Required | Default |
 | --- | --- | --- | --- |
 | `id` | `serial` | yes, primary key | auto-increment |
+| `user_id` | `integer` | no | `NULL` |
 | `stage` | `text` | yes | — |
 | `message` | `text` | yes | — |
 | `created_at` | `timestamptz` | yes | current timestamp |
@@ -337,7 +418,10 @@ a PostgreSQL foreign-key constraint.
 To inspect the structure after setup, open `psql` and run:
 
 ```sql
+\dt auth_*
 \dt finance_*
+\d auth_users
+\d auth_sessions
 \d finance_profiles
 \d finance_transactions
 \d finance_budgets
@@ -389,9 +473,9 @@ PROJECT_REPORT.md            Academic report, PEAS model, algorithms, and limita
 ## Useful commands
 
 ```bash
-pnpm run typecheck
-pnpm --filter @workspace/finance-advisor run build
-pnpm --filter @workspace/api-server run build
+corepack pnpm run typecheck
+corepack pnpm --filter @workspace/finance-advisor run build
+corepack pnpm --filter @workspace/api-server run build
 ```
 
 ## Troubleshooting
@@ -411,7 +495,7 @@ Check that:
 1. PostgreSQL is running.
 2. The API terminal is still running on port `5000`.
 3. The frontend is running on port `5173`.
-4. The database tables were created with `pnpm --filter @workspace/db run push`.
+4. The database tables were created with `corepack pnpm --filter @workspace/db run push`.
 
 ### Reset local demo data
 
