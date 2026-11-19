@@ -364,6 +364,18 @@ Every transaction can trigger this loop:
 
 The loop is visible in the dashboard's Agent Loop and Agent Activity sections.
 
+## Authentication
+
+Create an account from the Saarthi sign-up page with your name, email, and a password of at least eight characters. After sign-up, Saarthi signs you in and opens your dashboard. Existing users can use the Login page with their email and password.
+
+Use **Log out** in the sidebar to end the current session. The API stores a salted password hash, never the plain-text password, and uses a short-lived HTTP-only session cookie. The browser does not store passwords or authentication secrets in local storage. Every finance record is associated with the signed-in user, including sample workspace data.
+
+No new authentication environment variable is required. Keep `DATABASE_URL` set as described above because users, sessions, and finance data are stored in PostgreSQL. After pulling this change, apply the updated schema with:
+
+```bash
+corepack pnpm --filter @workspace/db run push
+```
+
 ## Project structure
 
 ```text

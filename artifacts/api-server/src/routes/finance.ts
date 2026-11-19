@@ -29,15 +29,25 @@ const router: IRouter = Router();
 router.use(requireAuth);
 const categories = ["Food", "Rent", "Transport", "Shopping", "Entertainment", "Bills", "Education", "Healthcare", "Other"];
 const trainingTerms: Record<string, string[]> = {
-  Food: ["swiggy", "zomato", "restaurant", "cafe", "coffee", "lunch", "dinner", "grocery", "food", "blinkit"],
+  Food: ["swiggy", "zomato", "restaurant", "cafe", "coffee", "lunch", "dinner", "grocery", "groceries", "dining", "food", "blinkit"],
   Rent: ["rent", "housing", "hostel", "landlord"],
-  Transport: ["uber", "ola", "metro", "bus", "fuel", "petrol", "taxi", "transport"],
+  Transport: ["uber", "ola", "metro", "bus", "fuel", "petrol", "taxi", "transport", "travel"],
   Shopping: ["amazon", "flipkart", "myntra", "shopping", "clothes", "shoes"],
   Entertainment: ["netflix", "spotify", "movie", "cinema", "gaming", "concert", "entertainment"],
-  Bills: ["electricity", "internet", "recharge", "mobile", "bill", "water", "utility"],
+  Bills: ["electricity", "internet", "recharge", "mobile", "bill", "bills", "water", "utility"],
   Education: ["course", "book", "college", "tuition", "education"],
   Healthcare: ["doctor", "medicine", "pharmacy", "hospital", "health"],
   Other: [],
+};
+const categoryAliases: Record<string, string[]> = {
+  Food: ["food", "grocery", "groceries", "restaurant", "dining", "swiggy", "zomato"],
+  Rent: ["rent", "housing", "hostel"],
+  Transport: ["transport", "travel", "uber", "ola", "metro", "fuel", "petrol", "taxi"],
+  Shopping: ["shopping", "amazon", "flipkart", "clothes", "shoes"],
+  Entertainment: ["entertainment", "netflix", "spotify", "movie", "cinema", "gaming"],
+  Bills: ["bills", "bill", "electricity", "internet", "recharge", "mobile", "water", "utility"],
+  Education: ["education", "course", "book", "college", "tuition"],
+  Healthcare: ["healthcare", "health", "doctor", "medicine", "pharmacy", "hospital"],
 };
 
 const round = (value: number) => Math.round(value * 100) / 100;
@@ -171,6 +181,35 @@ async function getDashboardData(userId: number) {
   };
 }
 
+async function askLanguageModel(question: string, dashboard: Awaited<ReturnType<typeof getDashboardData>>) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        "HTTP-Referer": "http://localhost:5173",
+        "X-Title": "Saarthi Finance Advisor",
+      },
+      body: JSON.stringify({
+        model: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: "You are Saarthi, a careful personal finance advisor. Answer the user's question clearly using only the supplied financial context. Use Indian rupees, show simple calculations when useful, do not invent missing data, and say when the context is insufficient. Keep the answer concise and practical." },
+          { role: "user", content: JSON.stringify({ question, financialContext: { profile: dashboard.profile, summary: dashboard.summary, categorySpending: dashboard.categorySpending, budgets: dashboard.budgets, goals: dashboard.goals, alerts: dashboard.alerts } }) },
+        ],
+      }),
+    });
+    if (!response.ok) return null;
+    const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    return payload.choices?.[0]?.message?.content?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 async function createRecommendation(userId: number) {
   const dashboard = await getDashboardData(userId);
   const topBudget = dashboard.budgets.find((budget) => budget.status !== "Within budget");
@@ -189,7 +228,15 @@ async function createRecommendation(userId: number) {
     message = `Your goal needs about ₹${goal.requiredMonthly.toLocaleString("en-IN")} each month, while the estimate is ₹${goal.expectedMonthly.toLocaleString("en-IN")}.`;
     action = "Increase monthly savings";
     utilityScore = 78;
+  } else if (dashboard.categorySpending[0]) {
+    const highestCategory = dashboard.categorySpending[0];
+    title = `Review ${highestCategory.category} spending`;
+    message = `${highestCategory.category} is your highest spending category at ₹${highestCategory.amount.toLocaleString("en-IN")} this period. Review the next few purchases to keep your spending on track.`;
+    action = "Review spending pattern";
+    utilityScore = 62;
   }
+  const [existing] = await db.select().from(recommendationsTable).where(and(eq(recommendationsTable.userId, userId), eq(recommendationsTable.title, title), eq(recommendationsTable.message, message))).limit(1);
+  if (existing) return existing;
   const [recommendation] = await db.insert(recommendationsTable).values({ userId, title, message, action, utilityScore: round(utilityScore) }).returning();
   return recommendation;
 }
@@ -339,24 +386,52 @@ router.post("/chat", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Ask a question about your finances." });
   const question = parsed.data.message.toLowerCase();
   const dashboard = await getDashboardData(req.userId!);
+  const modelAnswer = await askLanguageModel(parsed.data.message, dashboard);
+  if (modelAnswer) return res.json({ answer: modelAnswer, source: "AI advisor using stored financial context" });
   if (question.includes("most") || question.includes("highest")) {
     return res.json({ answer: `Your highest spending category this period is ${dashboard.summary.highestCategory}, based on ₹${dashboard.categorySpending[0]?.amount.toLocaleString("en-IN") ?? "0"} in recorded expenses.`, source: "Stored transactions and dashboard analysis" });
   }
-  if (question.includes("food")) {
-    const food = dashboard.categorySpending.find((item) => item.category === "Food")?.amount ?? 0;
-    return res.json({ answer: `You have spent ₹${food.toLocaleString("en-IN")} on food in the current analysis period.`, source: "Stored transactions" });
+  const requestedCategory = Object.entries(categoryAliases).find(([, aliases]) => aliases.some((alias) => question.includes(alias)))?.[0];
+  if (requestedCategory) {
+    const category = dashboard.categorySpending.find((item) => item.category === requestedCategory);
+    const amount = category?.amount ?? 0;
+    return res.json({ answer: `You have spent ₹${amount.toLocaleString("en-IN")} on ${requestedCategory.toLowerCase()} in the current analysis period.`, source: "Stored transactions" });
   }
-  if (question.includes("goal") || question.includes("reach")) {
+  if (question.includes("daily") || question.includes("per day") || question.includes("in a day") || question.includes("each day")) {
+    const dailyAllowance = Math.max(0, dashboard.summary.remainingBalance / 30);
+    return res.json({ answer: `You can plan to spend about ₹${dailyAllowance.toLocaleString("en-IN", { maximumFractionDigits: 0 })} per day. This estimate is based on your remaining balance of ₹${dashboard.summary.remainingBalance.toLocaleString("en-IN")} after ₹${dashboard.summary.totalExpenses.toLocaleString("en-IN")} in expenses, spread across 30 days.`, source: "Stored transactions and spending analysis" });
+  }
+  if (question.includes("income") || question.includes("salary") || question.includes("earn")) {
+    return res.json({ answer: `Your recorded monthly income is ₹${dashboard.summary.income.toLocaleString("en-IN")}. After current-period expenses, your estimated remaining balance is ₹${dashboard.summary.remainingBalance.toLocaleString("en-IN")}.`, source: "Profile and spending analysis" });
+  }
+  if (question.includes("balance") || question.includes("remaining") || question.includes("left") || question.includes("available") || question.includes("afford")) {
+    return res.json({ answer: `You have an estimated ₹${dashboard.summary.remainingBalance.toLocaleString("en-IN")} remaining after ₹${dashboard.summary.totalExpenses.toLocaleString("en-IN")} in current-period expenses.`, source: "Stored transactions and spending analysis" });
+  }
+  if (question.includes("spent") || question.includes("spend") || question.includes("expense") || question.includes("spending")) {
+    return res.json({ answer: `You have recorded ₹${dashboard.summary.totalExpenses.toLocaleString("en-IN")} in expenses in the current analysis period. Your highest category is ${dashboard.summary.highestCategory}.`, source: "Stored transactions and spending analysis" });
+  }
+  if (question.includes("saving") || question.includes("saved")) {
+    return res.json({ answer: `You currently have ₹${dashboard.summary.currentSavings.toLocaleString("en-IN")} saved. Based on your income and spending pattern, your projected savings are ₹${dashboard.summary.projectedSavings.toLocaleString("en-IN")}.`, source: "Profile and spending analysis" });
+  }
+  if (question.includes("budget") || question.includes("limit")) {
+    const budgets = dashboard.budgets.length ? dashboard.budgets.map((budget) => `${budget.category}: ₹${budget.spent.toLocaleString("en-IN")} of ₹${budget.amount.toLocaleString("en-IN")}`).join(", ") : "No category budgets have been set yet";
+    return res.json({ answer: `Your current budgets are: ${budgets}.`, source: "Stored budgets and transactions" });
+  }
+  const category = dashboard.categorySpending.find((item) => question.includes(item.category.toLowerCase()));
+  if (category) {
+    return res.json({ answer: `You have spent ₹${category.amount.toLocaleString("en-IN")} on ${category.category.toLowerCase()} in the current analysis period.`, source: "Stored transactions" });
+  }
+  if (question.includes("goal") || question.includes("target") || question.includes("reach")) {
     const goal = dashboard.goals[0];
     if (goal) {
       return res.json({ answer: `Your goal is ${goal.status.toLowerCase()}. The estimate is ₹${goal.expectedMonthly.toLocaleString("en-IN")} per month versus ₹${goal.requiredMonthly.toLocaleString("en-IN")} required.`, source: "Goal evaluator and savings estimate" });
     }
     return res.json({ answer: "You do not have a savings goal yet. Add one from the Goals page to start tracking progress.", source: "Goal evaluator" });
   }
-  if (question.includes("alert") || question.includes("why")) {
+  if (question.includes("alert") || question.includes("warning") || question.includes("worry") || question.includes("why")) {
     return res.json({ answer: dashboard.alerts[0]?.message ?? "There are no active alerts. Your current recorded spending is being monitored.", source: "Alert engine" });
   }
-  return res.json({ answer: `You have recorded ₹${dashboard.summary.totalExpenses.toLocaleString("en-IN")} in expenses this period and an estimated remaining balance of ₹${dashboard.summary.remainingBalance.toLocaleString("en-IN")}. Try asking about food, your goal, alerts, or your highest category.`, source: "Stored transactions and spending analysis" });
+  return res.json({ answer: `Here is your current financial picture: ₹${dashboard.summary.income.toLocaleString("en-IN")} monthly income, ₹${dashboard.summary.totalExpenses.toLocaleString("en-IN")} spent, ₹${dashboard.summary.remainingBalance.toLocaleString("en-IN")} remaining, and ₹${dashboard.summary.currentSavings.toLocaleString("en-IN")} saved. I can answer questions about your spending, balance, income, savings, budgets, goals, alerts, or categories using this data.`, source: "Stored profile, transactions, budgets, goals, and alerts" });
 });
 
 router.post("/feedback", async (req, res) => {
